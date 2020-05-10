@@ -47,8 +47,20 @@ namespace VDrumExplorer.Wpf
             kitNumber.PreviewTextInput += TextConversions.CheckDigits;
             userSamples.PreviewTextInput += TextConversions.CheckDigits;
             cancellationTokenSource = new CancellationTokenSource();
-            inputDevice.ItemsSource = AudioDevices.GetInputDeviceNames();
+
             kitNumber.Text = TextConversions.Format(schema.KitRoots.Count);
+
+            // Capture the input device names, and attempt to guess a reasonable default.
+            var allInputDevices = AudioDevices.GetInputDeviceNames();
+            var midiName = midiClient.OutputName;
+            var expectedInputDevices = new[] { $"MASTER ({midiName})", $"IN ({midiName})", $"KICK ({midiName})" };
+            inputDevice.ItemsSource = allInputDevices;
+            inputDevice.SelectedIndex = allInputDevices.FindIndex(inputName => expectedInputDevices.Contains(inputName));
+
+            foreach (var group in schema.InstrumentGroups)
+            {
+                instrumentGroupSelector.Items.Add(group.Description);
+            }
         }
 
         private async void StartRecording(object sender, RoutedEventArgs args)
@@ -76,7 +88,6 @@ namespace VDrumExplorer.Wpf
                 return;
             }
 
-            progress.Maximum = schema.PresetInstruments.Count + config.UserSamples;
             logger.Log($"Starting recording process");
             var midiNoteContext = midiNoteChain.GetFinalContext(instrumentRoot.Context);
             logger.Log($"Loading existing data to restore after recording");
@@ -121,12 +132,17 @@ namespace VDrumExplorer.Wpf
                 logger.Log($"No midi note for instrument 1. Please email a bug report to skeet@pobox.com");
             }
 
+            var presetInstrumentsToRecord = schema.PresetInstruments
+                .Where(ins => config.InstrumentGroup == -1 || ins.Group.Index == config.InstrumentGroup)
+                .ToList();
+            progress.Maximum = presetInstrumentsToRecord.Count + config.UserSamples;
+
             logger.Log($"Starting recording process");
             try
             {
                 var captures = new List<InstrumentAudio>();
                 progress.Value = 0;
-                foreach (var instrument in schema.PresetInstruments)
+                foreach (var instrument in presetInstrumentsToRecord)
                 {
                     var instrumentAudio = await RecordInstrument(instrument);
                     captures.Add(instrumentAudio);
@@ -141,6 +157,7 @@ namespace VDrumExplorer.Wpf
                 {
                     moduleAudio.Save(output);
                 }
+                logger.Log($"Saved instrument sounds to {config.OutputFile}.");
             }
             catch (OperationCanceledException)
             {
@@ -155,7 +172,6 @@ namespace VDrumExplorer.Wpf
                 data.RevertSnapshot();
                 await RestoreData(data);
             }
-            logger.Log($"Saved instrument sounds to {config.OutputFile}.");
             Close();
 
             async Task<InstrumentAudio> RecordInstrument(Instrument instrument)
@@ -166,6 +182,7 @@ namespace VDrumExplorer.Wpf
                 {
                     container.Container.Reset(container, data);
                 }
+                // Note: setting the instrument resets VEdit data to defaults
                 instrumentField.SetInstrument(instrumentFieldContext, data, instrument);
                 foreach (var container in instrumentContainers)
                 {
@@ -173,11 +190,10 @@ namespace VDrumExplorer.Wpf
                     midiClient.SendData(segment.Start.Value, segment.CopyData());
                     await Task.Delay(40, CancellationToken);
                 }
-
                 midiClient.Silence(config.MidiChannel);
                 await Task.Delay(40);
                 var recordingTask = AudioDevices.RecordAudio(config.AudioDeviceId, config.RecordingDuration, CancellationToken);
-                midiClient.PlayNote(config.MidiChannel, midiNote.Value, velocity: 80);
+                midiClient.PlayNote(config.MidiChannel, midiNote.Value, config.Attack);
                 var audio = await recordingTask;
                 return new InstrumentAudio(instrument, audio);
             }
@@ -285,9 +301,10 @@ namespace VDrumExplorer.Wpf
                 RecordingDuration = recordingDuration,
                 OutputFile = outputFile,
                 AudioDeviceId = deviceId.Value,
+                InstrumentGroup = instrumentGroupSelector.SelectedIndex - 1,
                 UserSamples = parsedUserSamples,
                 MidiChannel = midiChannel,
-                Attack = (int) attackSlider.Value
+                Attack = (int) attackSlider.Value,
             };
         }
 
@@ -297,6 +314,7 @@ namespace VDrumExplorer.Wpf
             internal TimeSpan RecordingDuration { get; set; }
             internal string OutputFile { get; set; }
             internal int AudioDeviceId { get; set; }
+            internal int InstrumentGroup { get; set; } // -1 for "All" or the instrument group otherwise
             internal int UserSamples { get; set; }
             internal int MidiChannel { get; set; }
             internal int Attack { get; set; }

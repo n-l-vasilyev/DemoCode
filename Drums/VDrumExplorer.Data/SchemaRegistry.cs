@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using ModuleIdentifier = VDrumExplorer.Midi.ModuleIdentifier;
 using VDrumExplorer.Data.Proto;
 
 namespace VDrumExplorer.Data
@@ -16,6 +17,7 @@ namespace VDrumExplorer.Data
             = new Dictionary<ModuleIdentifier, Lazy<ModuleSchema>>
         {
             { ModuleIdentifier.TD17, CreateLazySchema("VDrumExplorer.Data.TD17", "TD17.json") },
+            { ModuleIdentifier.TD27, CreateLazySchema("VDrumExplorer.Data.TD27", "TD27.json") },
             { ModuleIdentifier.TD50, CreateLazySchema("VDrumExplorer.Data.TD50", "TD50.json") }
 
         }.AsReadOnly();

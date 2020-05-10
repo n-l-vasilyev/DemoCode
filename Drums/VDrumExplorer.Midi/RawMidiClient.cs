@@ -10,17 +10,22 @@ using System.Threading.Tasks;
 namespace VDrumExplorer.Midi
 {
     /// <summary>
-    /// A MIDI client with almost no logic
+    /// A MIDI client with almost no logic.
     /// </summary>
     internal sealed class RawMidiClient : IDisposable
     {
+        public string InputName { get; }
+        public string OutputName { get; }
+
         private readonly IMidiInput input;
         private readonly IMidiOutput output;
 
-        private RawMidiClient(IMidiInput input, IMidiOutput output, Action<RawMidiMessage> messageHandler)
+        private RawMidiClient(IMidiInput input, string inputName, IMidiOutput output, string outputName, Action<RawMidiMessage> messageHandler)
         {
             this.input = input;
+            InputName = inputName;
             this.output = output;
+            OutputName = inputName;
             input.MessageReceived += (sender, args) => messageHandler(ConvertMessage(args));
         }
 
@@ -33,7 +38,7 @@ namespace VDrumExplorer.Midi
         {
             var input = await MidiAccessManager.Default.OpenInputAsync(inputDevice.SystemDeviceId);
             var output = await MidiAccessManager.Default.OpenOutputAsync(outputDevice.SystemDeviceId);
-            return new RawMidiClient(input, output, messageHandler);
+            return new RawMidiClient(input, inputDevice.Name, output, outputDevice.Name, messageHandler);
         }
 
         internal void Send(RawMidiMessage message)
@@ -43,7 +48,10 @@ namespace VDrumExplorer.Midi
 
         public void Dispose()
         {
-            // FIXME
+            // Calling CloseAsync is significantly faster than calling Dispose.
+            // This is slightly odd, as the implementation for desktop seems to call
+            // CloseAsync too. Not sure what's going on, and maybe we should be waiting
+            // the task to complete... but it doesn't seem to cause any harm.
             input.CloseAsync();
             output.CloseAsync();
         }

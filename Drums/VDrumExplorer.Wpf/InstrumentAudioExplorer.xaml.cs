@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using VDrumExplorer.Data;
@@ -24,12 +22,20 @@ namespace VDrumExplorer.Wpf
             InitializeComponent();
         }
 
-        internal InstrumentAudioExplorer(ILogger logger, ModuleAudio audio) : this()
+        internal InstrumentAudioExplorer(ILogger logger, ModuleAudio audio, string fileName) : this()
         {
             this.audio = audio;
             this.logger = logger;
+            Title = $"{Title} - {fileName}";
             capturesByGroup = audio.Captures.ToLookup(c => c.Instrument.Group);
-            outputDevice.ItemsSource = AudioDevices.GetOutputDeviceNames();
+            var allOutputDeviceNames = AudioDevices.GetOutputDeviceNames();
+            outputDevice.ItemsSource = allOutputDeviceNames;
+
+            // Assume that device 0 is the default. That will usually be the case.
+            if (allOutputDeviceNames.Count > 0)
+            {
+                outputDevice.SelectedIndex = 0;
+            }
 
             moduleId.Content = audio.Schema.Identifier.Name;
             userSamples.Content = TextConversions.Format(capturesByGroup[null].Count());

@@ -4,14 +4,14 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net472</TargetFramework>
     <UseWPF>true</UseWPF>
-    <LangVersion>preview</LangVersion>
-    <Version>1.0.0-alpha02</Version>
-    <AssemblyVersion>1.0.0.2</AssemblyVersion>
+    <LangVersion>8.0</LangVersion>
+    <Version>1.0.0-alpha04</Version>
+    <AssemblyVersion>1.0.0.4</AssemblyVersion>
     <PublishTrimmed>true</PublishTrimmed>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="NAudio" Version="1.9.0" />
+    <PackageReference Include="NAudio" Version="1.10.0" />
   </ItemGroup>
 
   <ItemGroup>

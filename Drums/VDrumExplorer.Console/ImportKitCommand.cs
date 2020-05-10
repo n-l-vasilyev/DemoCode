@@ -13,42 +13,36 @@ using System.Threading;
 using System.Threading.Tasks;
 using VDrumExplorer.Data;
 using VDrumExplorer.Data.Fields;
+using VDrumExplorer.Midi;
 
 namespace VDrumExplorer.Console
 {
     class ImportKitCommand : ICommandHandler
     {
-        internal static Command Command { get; } = CreateCommand();
-
-        private static Command CreateCommand()
+        internal static Command Command { get; } = new Command("import-kit")
         {
-            var command = new Command("import-kit")
-            {
-                Description = "Imports a kit from a device, saving it as a file",
-                Handler = new ImportKitCommand(),
-            };
-            command.AddOption(new Option("--kit", "Kit number to import") { Argument = new Argument<int>(), Required = true });
-            command.AddOption(new Option("--file", "File to save") { Argument = new Argument<string>(), Required = true  });
-            return command;
+            Description = "Imports a kit from a device, saving it as a file",
+            Handler = new ImportKitCommand(),
         }
+        .AddRequiredOption<int>("--kit", "Kit number to import")
+        .AddRequiredOption<string>("--file", "File to save");
 
         public async Task<int> InvokeAsync(InvocationContext context)
         {
             var console = context.Console.Out;
             var kit = context.ParseResult.ValueForOption<int>("kit");
             var file = context.ParseResult.ValueForOption<string>("file");
-            var (client, schema) = await DeviceDetection.DetectDeviceAsync(context.Console.Out);
+            var client = await MidiDevices.DetectSingleRolandMidiClientAsync(console.WriteLine, SchemaRegistry.KnownSchemas.Keys);
 
             if (client == null)
             {
                 return 1;
             }
-
-            var moduleData = new ModuleData();
+            var schema = SchemaRegistry.KnownSchemas[client.Identifier].Value;
 
             using (client)
             {
-                if (!schema.KitRoots.TryGetValue(kit, out var kitRoot))
+                if (!schema.KitRoots.TryGetValue(kit, out _))
                 {
                     console.WriteLine($"Kit {kit} out of range");
                     return 1;
@@ -59,15 +53,8 @@ namespace VDrumExplorer.Console
                 try
                 {
                     Stopwatch sw = Stopwatch.StartNew();
-                    var containers = kitRoot.Context.AnnotateDescendantsAndSelf().Where(c => c.Container.Loadable).ToList();
-                    console.WriteLine($"Loading {containers.Count} containers from device {schema.Identifier.Name}");
-                    foreach (var container in containers)
-                    {
-                        await PopulateSegment(moduleData, container, overallToken);
-                    }
+                    var kitToSave = await KitUtilities.ReadKit(schema, client, kit, console);
                     console.WriteLine($"Finished loading in {(int) sw.Elapsed.TotalSeconds} seconds");
-                    var clonedData = kitRoot.Context.CloneData(moduleData, schema.KitRoots[1].Context.Address);
-                    var kitToSave = new Kit(schema, clonedData, kit);
                     using (var stream = File.Create(file))
                     {
                         kitToSave.Save(stream);
@@ -87,21 +74,6 @@ namespace VDrumExplorer.Console
 
             }
             return 0;
-
-            async Task PopulateSegment(ModuleData data, AnnotatedContainer annotatedContainer, CancellationToken token)
-            {
-                var timerToken = new CancellationTokenSource(TimeSpan.FromSeconds(1)).Token;
-                var effectiveToken = CancellationTokenSource.CreateLinkedTokenSource(token, timerToken).Token;
-                try
-                {
-                    var segment = await client.RequestDataAsync(annotatedContainer.Context.Address.Value, annotatedContainer.Container.Size, effectiveToken);
-                    data.Populate(annotatedContainer.Context.Address, segment);
-                }
-                catch (OperationCanceledException) when (timerToken.IsCancellationRequested)
-                {
-                    console.WriteLine($"Device didn't respond for container {annotatedContainer.Path}; skipping.");
-                }
-            }
         }
     }
 }

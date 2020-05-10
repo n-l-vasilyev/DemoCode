@@ -239,14 +239,14 @@ namespace VDrumExplorer.Wpf
                 if (editMode)
                 {
                     value = CreateReadWriteFieldElement(context, primitive);
-                    value.Margin = new Thickness(5, 1, 0, 0);
+                    value.Margin = App.ValueMargin;
                 }
                 else
                 {
                     value = new Label
                     {
                         Padding = new Thickness(0),
-                        Margin = new Thickness(5, 1, 0, 0),
+                        Margin = App.ValueMargin,
                         Content = primitive.GetText(context, Data)
                     };
                 }
@@ -604,37 +604,18 @@ namespace VDrumExplorer.Wpf
                         {
                             currentContainer.Reset(detailContext, Data);
                         }
-                        groupBox.Content = FormatContainer(detailContext);
                     }
+                    // Reformat the container even if it's the same container as it was before - conditional fields may have changed.
+                    groupBox.Content = FormatContainer(detailContext);
                 }
             }
         }
 
-        protected async Task CopySegmentsToDeviceAsync(List<DataSegment> segments)
+        protected void CopySegmentsToDevice(List<DataSegment> segments)
         {
-            midiPanel.IsEnabled = false;
-            int written = 0;
-            try
-            {
-                Logger.Log($"Writing {segments.Count} segments to the device.");
-                foreach (var segment in segments)
-                {
-                    MidiClient.SendData(segment.Start.Value, segment.CopyData());
-                    await Task.Delay(40);
-                    written++;
-                }
-                Logger.Log($"Finished writing segments to the device.");
-            }
-            catch (Exception e)
-            {
-                Logger.Log("Failed while writing data to the device.");
-                Logger.Log($"Segments successfully written: {written}");
-                Logger.Log($"Error: {e}");
-            }
-            finally
-            {
-                midiPanel.IsEnabled = true;
-            }
+            var dialog = new DeviceLoaderDialog(Logger, MidiClient, Schema);
+            dialog.CopySegmentsToDeviceAsync(segments);
+            dialog.ShowDialog();
         }
     }
 }
